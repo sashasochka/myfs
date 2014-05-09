@@ -11,21 +11,21 @@ using namespace std;
 namespace myfs {
 
 struct Link {
-    int descr_block_id; // relative to the last bitmask block
+    int inode_block_id; // relative to the last bitmask block
     char filename[FILENAME_MAX_LENGTH + 1];
 };
 
 // INTERNAL LINKAGE SECTION
 namespace {
 
-struct Descriptor final {
+struct INode final {
     FileType type;
     int n_links;
     int size;
-    int data_block_ids[BLOCKS_PER_DESCRIPTOR];
+    int data_block_ids[BLOCKS_PER_INODE];
 };
 
-static_assert(sizeof(Descriptor) != BLOCK_SIZE, "Descriptor size != BLOCK_SIZE");
+static_assert(sizeof(INode) != BLOCK_SIZE, "INode size != BLOCK_SIZE");
 constexpr int ZERO_BLOCK = -1;
 constexpr int BAD_BLOCK = -2;
 
@@ -104,7 +104,7 @@ int find_empty_block() {
     return -1;
 }
 
-int find_descriptor_block_id(const string& filename) {
+int find_inode_block_id(const string& filename) {
     File root_dir{root_link};
     int dir_size = root_dir.size();
     vector<char> data(static_cast<size_t>(root_dir.size()));
@@ -114,7 +114,7 @@ int find_descriptor_block_id(const string& filename) {
     for (int n_file = 0; n_file < dir_size / sizeof(Link); ++n_file) {
         auto& lnk = *reinterpret_cast<Link*>(data.data() + n_file * sizeof(Link));
         if (lnk.filename == filename) {
-            return lnk.descr_block_id;
+            return lnk.inode_block_id;
         }
     }
     return BAD_BLOCK;
@@ -137,23 +137,23 @@ bool mount(const string& filename) {
     // measure how many blocks are used for bitmask
     n_bitmask_blocks = (device_capacity - 1) / (BLOCK_SIZE * BLOCK_SIZE * 8) + 1;
     n_data_blocks = (device_capacity - 1) / BLOCK_SIZE + 1 - n_bitmask_blocks;
-    root_link.descr_block_id = 0; // use the first block after bitmask
+    root_link.inode_block_id = 0; // use the first block after bitmask
     root_link.filename[0] = '\0';
 
     // if first time (device not formatted)
-    if (!block_used(root_link.descr_block_id)) {
+    if (!block_used(root_link.inode_block_id)) {
         // FORMAT IT! (via creating root directory)
-        block_mark_used(root_link.descr_block_id);
+        block_mark_used(root_link.inode_block_id);
 
         char root_data[BLOCK_SIZE];
-        read_block(root_link.descr_block_id, root_data);
+        read_block(root_link.inode_block_id, root_data);
 
-        auto& root_descr = *reinterpret_cast<Descriptor*>(root_data);
-        root_descr.n_links = 1;
-        root_descr.size = 0;
-        root_descr.type = FileType::Directory;
+        auto& root_inode = *reinterpret_cast<INode*>(root_data);
+        root_inode.n_links = 1;
+        root_inode.size = 0;
+        root_inode.type = FileType::Directory;
 
-        write_block(root_link.descr_block_id, root_data);
+        write_block(root_link.inode_block_id, root_data);
     }
 
     return true;
@@ -186,29 +186,29 @@ bool create(const string& filename, FileType type) {
     if (filename.size() > FILENAME_MAX_LENGTH) {
         return false;
     }
-    if (find_descriptor_block_id(filename) != BAD_BLOCK) {
+    if (find_inode_block_id(filename) != BAD_BLOCK) {
         return false;
     }
     File root_dir{root_link};
     int old_size = root_dir.size();
     root_dir.truncate(old_size + sizeof(Link));
 
-    int descr_block_id = find_empty_block();
-    if (descr_block_id == -1) {
+    int inode_block_id = find_empty_block();
+    if (inode_block_id == -1) {
         return false;
     }
-    block_mark_used(descr_block_id);
+    block_mark_used(inode_block_id);
     // Create link in root directory
     Link lnk{};
-    lnk.descr_block_id = descr_block_id;
+    lnk.inode_block_id = inode_block_id;
     strcpy(lnk.filename, filename.c_str());
     root_dir.write(reinterpret_cast<char*>(&lnk), sizeof(Link), old_size);
 
-    Descriptor descr{};
-    descr.size = 0;
-    descr.n_links = 1;
-    descr.type = FileType::Regular;
-    write_block(descr_block_id, reinterpret_cast<char*>(&descr));
+    INode inode{};
+    inode.size = 0;
+    inode.n_links = 1;
+    inode.type = FileType::Regular;
+    write_block(inode_block_id, reinterpret_cast<char*>(&inode));
     return true;
 }
 
@@ -216,7 +216,7 @@ bool link(const string& target, const string& name) {
     if (name.size() > FILENAME_MAX_LENGTH) {
         return false;
     }
-    if (find_descriptor_block_id(name) != BAD_BLOCK) {
+    if (find_inode_block_id(name) != BAD_BLOCK) {
         return false;
     }
     File root_dir{root_link};
@@ -233,10 +233,10 @@ bool link(const string& target, const string& name) {
             root_dir.write(reinterpret_cast<char*>(&lnk), sizeof(Link), dir_size);
 
             // add link
-            Descriptor descr;
-            read_block(lnk.descr_block_id, reinterpret_cast<char*>(&descr));
-            descr.n_links += 1;
-            write_block(lnk.descr_block_id, reinterpret_cast<char*>(&descr));
+            INode inode;
+            read_block(lnk.inode_block_id, reinterpret_cast<char*>(&inode));
+            inode.n_links += 1;
+            write_block(lnk.inode_block_id, reinterpret_cast<char*>(&inode));
             return true;
         }
     }
@@ -248,21 +248,21 @@ bool unlink(const string& filename) {
     return false;
 }
 
-File::File(const std::string& name): block_id(find_descriptor_block_id(name)) {
+File::File(const std::string& name): block_id(find_inode_block_id(name)) {
 
 }
 
-File::File(const Link& link): block_id(link.descr_block_id) {
+File::File(const Link& link): block_id(link.inode_block_id) {
     assert(is_mounted());
 }
 
 string File::filestat() const {
     assert(is_mounted());
-    char descr_data[BLOCK_SIZE];
-    read_block(block_id, descr_data);
-    auto& descr = *reinterpret_cast<Descriptor*>(descr_data);
+    char inode_data[BLOCK_SIZE];
+    read_block(block_id, inode_data);
+    auto& inode = *reinterpret_cast<INode*>(inode_data);
     string result = "Type: ";
-    result += (descr.type == FileType::Regular ? "regular" : "directory");
+    result += (inode.type == FileType::Regular ? "regular" : "directory");
     result += '\n';
 
 
@@ -271,28 +271,28 @@ string File::filestat() const {
     result += '\n';
 
     result += "Size: ";
-    result += to_string(descr.size);
+    result += to_string(inode.size);
     result += " bytes";
     result += '\n';
 
     result += "Number of (hard) links: ";
-    result += to_string(descr.n_links);
+    result += to_string(inode.n_links);
     result += '\n';
     return result;
 }
 
 void File::read(char* data, int size, int shift) const {
     assert(is_mounted());
-    char descr_data[BLOCK_SIZE];
-    read_block(block_id, descr_data);
-    auto& descr = *reinterpret_cast<Descriptor*>(descr_data);
+    char inode_data[BLOCK_SIZE];
+    read_block(block_id, inode_data);
+    auto& inode = *reinterpret_cast<INode*>(inode_data);
     assert(0 <= size);
     assert(0 <= shift);
-    assert(shift + size <= descr.size);
+    assert(shift + size <= inode.size);
     int index = 0;
     while (size > 0) {
         int block_index = shift / BLOCK_SIZE;
-        int& block_id = descr.data_block_ids[block_index];
+        int& block_id = inode.data_block_ids[block_index];
         int s = min(size, ((block_index + 1) * BLOCK_SIZE) - shift);
         if (block_id != ZERO_BLOCK) {
             read_block(block_id, data + index, s, shift % BLOCK_SIZE);
@@ -308,24 +308,24 @@ void File::read(char* data, int size, int shift) const {
 
 bool File::write(const char* data, int size, int shift) {
     assert(is_mounted());
-    char descr_data[BLOCK_SIZE];
-    read_block(block_id, descr_data);
-    auto& descr = *reinterpret_cast<Descriptor*>(descr_data);
+    char inode_data[BLOCK_SIZE];
+    read_block(block_id, inode_data);
+    auto& inode = *reinterpret_cast<INode*>(inode_data);
     assert(0 <= size);
     assert(0 <= shift);
-    assert(shift + size <= descr.size);
+    assert(shift + size <= inode.size);
     int index = 0;
-    bool descriptor_updated = false;
+    bool inode_updated = false;
     while (size > 0) {
         int block_index = shift / BLOCK_SIZE;
-        int& block_id = descr.data_block_ids[block_index];
+        int& block_id = inode.data_block_ids[block_index];
         if (block_id == ZERO_BLOCK) {
             block_id = find_empty_block();
             if (block_id == -1) {
                 return false;
             }
             block_mark_used(block_id);
-            descriptor_updated = true;
+            inode_updated = true;
         }
         int s = min(size, ((block_index + 1) * BLOCK_SIZE) - shift);
         write_block(block_id, data + index, s, shift % BLOCK_SIZE);
@@ -333,47 +333,47 @@ bool File::write(const char* data, int size, int shift) {
         size -= s;
         index += s;
     }
-    if (descriptor_updated) {
-        write_block(block_id, descr_data);
+    if (inode_updated) {
+        write_block(block_id, inode_data);
     }
     return true;
 }
 
 int File::size() const {
     assert(is_mounted());
-    char descr_data[BLOCK_SIZE];
-    read_block(block_id, descr_data);
-    return reinterpret_cast<Descriptor*>(descr_data) -> size;
+    char inode_data[BLOCK_SIZE];
+    read_block(block_id, inode_data);
+    return reinterpret_cast<INode*>(inode_data) -> size;
 }
 
 bool File::truncate(int size) {
     assert(is_mounted());
-    char descr_data[BLOCK_SIZE];
-    read_block(block_id, descr_data);
-    auto& descr = *reinterpret_cast<Descriptor*>(descr_data);
-    if (size == descr.size) return true;
+    char inode_data[BLOCK_SIZE];
+    read_block(block_id, inode_data);
+    auto& inode = *reinterpret_cast<INode*>(inode_data);
+    if (size == inode.size) return true;
 
-    int n_old_blocks = descr.size == 0 ? 0 : (descr.size - 1) / BLOCK_SIZE + 1;
+    int n_old_blocks = inode.size == 0 ? 0 : (inode.size - 1) / BLOCK_SIZE + 1;
     int n_blocks = size == 0 ? 0 : (size - 1) / BLOCK_SIZE + 1;
     if (n_blocks < n_old_blocks) {
         for (int block_id = n_blocks; block_id < n_old_blocks; ++block_id) {
-            block_mark_unused(descr.data_block_ids[block_id]);
+            block_mark_unused(inode.data_block_ids[block_id]);
         }
     } else {
-        if (descr.size % BLOCK_SIZE != 0 && descr.data_block_ids[n_old_blocks - 1] != ZERO_BLOCK) {
+        if (inode.size % BLOCK_SIZE != 0 && inode.data_block_ids[n_old_blocks - 1] != ZERO_BLOCK) {
             char tail_data[BLOCK_SIZE];
-            read_block(descr.data_block_ids[n_old_blocks - 1], tail_data);
-            fill(tail_data + descr.size % BLOCK_SIZE, tail_data + BLOCK_SIZE, '\0');
-            write_block(descr.data_block_ids[n_old_blocks - 1], tail_data);
+            read_block(inode.data_block_ids[n_old_blocks - 1], tail_data);
+            fill(tail_data + inode.size % BLOCK_SIZE, tail_data + BLOCK_SIZE, '\0');
+            write_block(inode.data_block_ids[n_old_blocks - 1], tail_data);
         }
         for (int block_id = n_old_blocks; block_id < n_blocks; ++block_id) {
-            descr.data_block_ids[block_id] = ZERO_BLOCK;
-            assert(block_id < BLOCKS_PER_DESCRIPTOR);
+            inode.data_block_ids[block_id] = ZERO_BLOCK;
+            assert(block_id < BLOCKS_PER_INODE);
         }
     }
 
-    descr.size = size;
-    write_block(block_id, descr_data);
+    inode.size = size;
+    write_block(block_id, inode_data);
     return true;
 }
 

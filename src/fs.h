@@ -4,9 +4,9 @@
 namespace myfs
 {
 constexpr auto
-    BLOCK_SIZE = 64,
+    BLOCK_SIZE = 512, // 64 (512)
     FILENAME_MAX_LENGTH = 15,
-    BLOCKS_PER_DESCRIPTOR = 14;
+    BLOCKS_PER_INODE = 126; // 14 (126)
 
 struct Link;
 

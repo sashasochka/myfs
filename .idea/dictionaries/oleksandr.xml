@@ -6,6 +6,7 @@
       <w>dirname</w>
       <w>filestat</w>
       <w>fstream</w>
+      <w>inode</w>
       <w>mkdir</w>
       <w>myfs</w>
       <w>rmdir</w>
