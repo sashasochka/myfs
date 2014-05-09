@@ -27,6 +27,7 @@ struct Descriptor final {
 
 static_assert(sizeof(Descriptor) != BLOCK_SIZE, "Descriptor size != BLOCK_SIZE");
 constexpr int ZERO_BLOCK = -1;
+constexpr int BAD_BLOCK = -2;
 
 auto device_capacity = -1;
 auto n_bitmask_blocks = -1;
@@ -103,6 +104,22 @@ int find_empty_block() {
     return -1;
 }
 
+int find_descriptor_block_id(const string& filename) {
+    File root_dir{root_link};
+    int dir_size = root_dir.size();
+    vector<char> data(static_cast<size_t>(root_dir.size()));
+    root_dir.read(data.data(), dir_size, 0);
+    assert(dir_size % sizeof(Link) == 0);
+
+    for (int n_file = 0; n_file < dir_size / sizeof(Link); ++n_file) {
+        auto& lnk = *reinterpret_cast<Link*>(data.data() + n_file * sizeof(Link));
+        if (lnk.filename == filename) {
+            return lnk.descr_block_id;
+        }
+    }
+    return BAD_BLOCK;
+}
+
 } // END OF INTERNAL LINKAGE SECTION
 
 
@@ -165,8 +182,11 @@ string ls() {
     return result;
 }
 
-bool create(const string& name, FileType type) {
-    if (name.size() > FILENAME_MAX_LENGTH) {
+bool create(const string& filename, FileType type) {
+    if (filename.size() > FILENAME_MAX_LENGTH) {
+        return false;
+    }
+    if (find_descriptor_block_id(filename) != BAD_BLOCK) {
         return false;
     }
     File root_dir{root_link};
@@ -181,7 +201,7 @@ bool create(const string& name, FileType type) {
     // Create link in root directory
     Link lnk{};
     lnk.descr_block_id = descr_block_id;
-    strcpy(lnk.filename, name.c_str());
+    strcpy(lnk.filename, filename.c_str());
     root_dir.write(reinterpret_cast<char*>(&lnk), sizeof(Link), old_size);
 
     Descriptor descr{};
@@ -193,6 +213,12 @@ bool create(const string& name, FileType type) {
 }
 
 bool link(const string& target, const string& name) {
+    if (name.size() > FILENAME_MAX_LENGTH) {
+        return false;
+    }
+    if (find_descriptor_block_id(name) != BAD_BLOCK) {
+        return false;
+    }
     File root_dir{root_link};
     int dir_size = root_dir.size();
     vector<char> data(static_cast<size_t>(root_dir.size()));

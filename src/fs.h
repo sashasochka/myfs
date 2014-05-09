@@ -29,7 +29,7 @@ private:
 bool mount(const std::string& filename);
 void umount();
 std::string ls();
-bool create(const std::string& name, FileType type = FileType::Regular);
+bool create(const std::string& filename, FileType type = FileType::Regular);
 bool link(const std::string& target, const std::string& name);
 bool unlink(const std::string& filename);
 bool mkdir(const std::string& dirname);
