@@ -231,6 +231,12 @@ bool link(const string& target, const string& name) {
             strcpy(lnk.filename, name.c_str());
             root_dir.truncate(dir_size + sizeof(Link));
             root_dir.write(reinterpret_cast<char*>(&lnk), sizeof(Link), dir_size);
+
+            // add link
+            Descriptor descr;
+            read_block(lnk.descr_block_id, reinterpret_cast<char*>(&descr));
+            descr.n_links += 1;
+            write_block(lnk.descr_block_id, reinterpret_cast<char*>(&descr));
             return true;
         }
     }
@@ -242,32 +248,38 @@ bool unlink(const string& filename) {
     return false;
 }
 
-File::File(const std::string& name): link(nullptr) {
-    assert(false);
+File::File(const std::string& name): block_id(find_descriptor_block_id(name)) {
+
 }
 
-File::File(const Link& link): link{&link} {
+File::File(const Link& link): block_id(link.descr_block_id) {
     assert(is_mounted());
 }
 
 string File::filestat() const {
     assert(is_mounted());
     char descr_data[BLOCK_SIZE];
-    read_block(link->descr_block_id, descr_data);
+    read_block(block_id, descr_data);
     auto& descr = *reinterpret_cast<Descriptor*>(descr_data);
     string result = "Type: ";
     result += (descr.type == FileType::Regular ? "regular" : "directory");
-    result += "\nSize:";
+    result += '\n';
+
+    result += "Size: ";
     result += to_string(descr.size);
-    result += "\nNumber of (hard) links: ";
+    result += " bytes";
+    result += '\n';
+
+    result += "Number of (hard) links: ";
     result += to_string(descr.n_links);
+    result += '\n';
     return result;
 }
 
 void File::read(char* data, int size, int shift) const {
     assert(is_mounted());
     char descr_data[BLOCK_SIZE];
-    read_block(link->descr_block_id, descr_data);
+    read_block(block_id, descr_data);
     auto& descr = *reinterpret_cast<Descriptor*>(descr_data);
     assert(0 <= size);
     assert(0 <= shift);
@@ -292,7 +304,7 @@ void File::read(char* data, int size, int shift) const {
 bool File::write(const char* data, int size, int shift) {
     assert(is_mounted());
     char descr_data[BLOCK_SIZE];
-    read_block(link->descr_block_id, descr_data);
+    read_block(block_id, descr_data);
     auto& descr = *reinterpret_cast<Descriptor*>(descr_data);
     assert(0 <= size);
     assert(0 <= shift);
@@ -317,7 +329,7 @@ bool File::write(const char* data, int size, int shift) {
         index += s;
     }
     if (descriptor_updated) {
-        write_block(link->descr_block_id, descr_data);
+        write_block(block_id, descr_data);
     }
     return true;
 }
@@ -325,14 +337,14 @@ bool File::write(const char* data, int size, int shift) {
 int File::size() const {
     assert(is_mounted());
     char descr_data[BLOCK_SIZE];
-    read_block(link->descr_block_id, descr_data);
+    read_block(block_id, descr_data);
     return reinterpret_cast<Descriptor*>(descr_data) -> size;
 }
 
 bool File::truncate(int size) {
     assert(is_mounted());
     char descr_data[BLOCK_SIZE];
-    read_block(link->descr_block_id, descr_data);
+    read_block(block_id, descr_data);
     auto& descr = *reinterpret_cast<Descriptor*>(descr_data);
     if (size == descr.size) return true;
 
@@ -356,7 +368,7 @@ bool File::truncate(int size) {
     }
 
     descr.size = size;
-    write_block(link->descr_block_id, descr_data);
+    write_block(block_id, descr_data);
     return true;
 }
 

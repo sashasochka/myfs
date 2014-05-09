@@ -25,11 +25,11 @@ int main() {
             cout << "File system unmounted!" << endl;
         } else if (cmd == "ls") {
             cout << myfs::ls();
-        } else if (cmd == "create") {
+        } else if (cmd == "create" || cmd == "touch") {
             string filename;
             cin >> filename;
             cout << (myfs::create(filename) ? "File created" : "File wasn't created") << endl;
-        } else if (cmd == "link") {
+        } else if (cmd == "link" || cmd == "ln") {
             string target, name;
             cin >> target >> name;
             cout << (myfs::link(target, name) ? "Link created" : "Link wasn't created") << endl;
@@ -59,7 +59,7 @@ int main() {
             string filename;
             cin >> filename;
             myfs::File f{filename};
-            cout << f.filestat() << endl;
+            cout << f.filestat();
         } else if (cmd == "read") {
             string filename;
             cin >> filename;

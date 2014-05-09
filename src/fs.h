@@ -23,7 +23,7 @@ struct File final {
     void close() const;
     ~File();
 private:
-    const Link* link;
+    const int block_id;
 };
 
 bool mount(const std::string& filename);
