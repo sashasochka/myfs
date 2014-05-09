@@ -244,7 +244,41 @@ bool link(const string& target, const string& name) {
 }
 
 bool unlink(const string& filename) {
-    // todo
+    if (filename.size() > FILENAME_MAX_LENGTH) {
+        return false;
+    }
+
+    File root_dir{root_link};
+    int old_size = root_dir.size();
+
+    vector<char> data(static_cast<size_t>(root_dir.size()));
+    root_dir.read(data.data(), old_size, 0);
+    assert(old_size % sizeof(Link) == 0);
+    for (int n_file = 0; n_file < old_size / sizeof(Link); ++n_file) {
+        auto& lnk = *reinterpret_cast<Link*>(data.data() + n_file * sizeof(Link));
+        if (lnk.filename == filename) {
+            INode inode;
+            read_block(lnk.inode_block_id, reinterpret_cast<char*>(&inode));
+            if (inode.n_links == 1) {
+                for (int block_index = 0; block_index * BLOCK_SIZE < inode.size; ++block_index) {
+                    int block_id = inode.data_block_ids[block_index];
+                    if (block_id != ZERO_BLOCK) {
+                        block_mark_unused(block_id);
+                    }
+                }
+                block_mark_unused(lnk.inode_block_id);
+            } else {
+                inode.n_links--;
+                write_block(lnk.inode_block_id, reinterpret_cast<char*>(&inode));
+            }
+
+            root_dir.read(reinterpret_cast<char*>(&lnk), sizeof(Link), old_size - sizeof(Link));
+            root_dir.write(reinterpret_cast<char*>(&lnk), sizeof(Link), n_file * sizeof(Link));
+            root_dir.truncate(old_size - sizeof(Link));
+            return true;
+        }
+    }
+
     return false;
 }
 
