@@ -26,7 +26,7 @@ struct Descriptor final {
 };
 
 static_assert(sizeof(Descriptor) != BLOCK_SIZE, "Descriptor size != BLOCK_SIZE");
-
+constexpr int ZERO_BLOCK = -1;
 
 auto device_capacity = -1;
 auto n_bitmask_blocks = -1;
@@ -179,7 +179,7 @@ bool create(const string& name, FileType type) {
     }
     block_mark_used(descr_block_id);
     // Create link in root directory
-    Link lnk;
+    Link lnk{};
     lnk.descr_block_id = descr_block_id;
     strcpy(lnk.filename, name.c_str());
     root_dir.write(reinterpret_cast<char*>(&lnk), sizeof(Link), old_size);
@@ -248,9 +248,10 @@ void File::read(char* data, int size, int shift) const {
     assert(shift + size <= descr.size);
     int index = 0;
     while (size > 0) {
-        int block_id = descr.data_block_ids[(shift - 1) / BLOCK_SIZE + 1];
-        int s = min(size, ((block_id + 1) * BLOCK_SIZE) - shift);
-        if (block_id != 0) {
+        int block_index = shift / BLOCK_SIZE;
+        int& block_id = descr.data_block_ids[block_index];
+        int s = min(size, ((block_index + 1) * BLOCK_SIZE) - shift);
+        if (block_id != ZERO_BLOCK) {
             read_block(block_id, data + index, s, shift % BLOCK_SIZE);
         } else {
             // zero data optimization (only nulls in file block)
@@ -273,8 +274,9 @@ bool File::write(const char* data, int size, int shift) {
     int index = 0;
     bool descriptor_updated = false;
     while (size > 0) {
-        int& block_id = descr.data_block_ids[(shift - 1) / BLOCK_SIZE + 1];
-        if (block_id == 0) {
+        int block_index = shift / BLOCK_SIZE;
+        int& block_id = descr.data_block_ids[block_index];
+        if (block_id == ZERO_BLOCK) {
             block_id = find_empty_block();
             if (block_id == -1) {
                 return false;
@@ -282,7 +284,7 @@ bool File::write(const char* data, int size, int shift) {
             block_mark_used(block_id);
             descriptor_updated = true;
         }
-        int s = min(size, ((block_id + 1) * BLOCK_SIZE) - shift);
+        int s = min(size, ((block_index + 1) * BLOCK_SIZE) - shift);
         write_block(block_id, data + index, s, shift % BLOCK_SIZE);
         shift += s;
         size -= s;
@@ -310,20 +312,20 @@ bool File::truncate(int size) {
 
     int old_size = descr.size;
     int n_old_blocks = old_size == 0 ? 0 : (old_size - 1) / BLOCK_SIZE + 1;
-    int n_blocks = (size - 1) / BLOCK_SIZE + 1;
+    int n_blocks = size == 0 ? 0 : (size - 1) / BLOCK_SIZE + 1;
     if (n_blocks < n_old_blocks) {
         for (int block_id = n_blocks; block_id < n_old_blocks; ++block_id) {
-            block_mark_unused(block_id);
+            block_mark_unused(descr.data_block_ids[block_id]);
         }
     } else {
-        if (size % BLOCK_SIZE != 0 && descr.data_block_ids[n_old_blocks - 1] != 0) {
+        if (size % BLOCK_SIZE != 0 && descr.data_block_ids[n_old_blocks - 1] != ZERO_BLOCK) {
             char tail_data[BLOCK_SIZE];
             read_block(descr.data_block_ids[n_old_blocks - 1], tail_data);
-            fill(tail_data + size % BLOCK_SIZE, tail_data + BLOCK_SIZE, '\0');
+            fill(tail_data + descr.size % BLOCK_SIZE, tail_data + BLOCK_SIZE, '\0');
             write_block(descr.data_block_ids[n_old_blocks - 1], tail_data);
         }
         for (int block_id = n_old_blocks; block_id < n_blocks; ++block_id) {
-            descr.data_block_ids[block_id] = 0;
+            descr.data_block_ids[block_id] = ZERO_BLOCK;
         }
     }
 
