@@ -1,0 +1,10 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Release" type="CMakeRunConfiguration" factoryName="Application" singleton="true" WORKING_DIR="file://$PROJECT_DIR$" PASS_PARENT_ENVS="FALSE" PROJECT_NAME="MyFS file system" TARGET_NAME="fs" CONFIG_NAME="Release">
+    <envs />
+    <RunnerSettings RunnerId="CPPAppRunner" />
+    <ConfigurationWrapper RunnerId="CPPAppRunner" />
+    <method>
+      <option name="ToolBeforeRunTask" enabled="true" actionId="Tool_External Tools_recreate device" />
+    </method>
+  </configuration>
+</component>

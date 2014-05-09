@@ -1,0 +1,4 @@
+#!/bin/bash
+rm hda
+truncate -s 10K hda
+
