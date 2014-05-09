@@ -265,6 +265,11 @@ string File::filestat() const {
     result += (descr.type == FileType::Regular ? "regular" : "directory");
     result += '\n';
 
+
+    result += "Inode: ";
+    result += to_string(block_id);
+    result += '\n';
+
     result += "Size: ";
     result += to_string(descr.size);
     result += " bytes";
