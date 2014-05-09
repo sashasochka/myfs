@@ -60,18 +60,25 @@ int main() {
             cin >> filename;
             myfs::File f{filename};
             cout << f.filestat();
-        } else if (cmd == "read") {
+        } else if (cmd == "read" || cmd == "cat") {
             string filename;
             cin >> filename;
-//            myfs::File f{filename};
-//            cout << f.filestat() << endl;
-            cout << "NOT IMPLEMENTED" << endl;
+            cout << myfs::File{filename}.cat() << endl;
         } else if (cmd == "write") {
             string filename;
             cin >> filename;
-//            myfs::File f{filename};
-//            cout << f.filestat() << endl;
-            cout << "NOT IMPLEMENTED" << endl;
+            string data;
+            while (true) {
+                string s;
+                cin >> s;
+                if (s == "END") break;
+                data += s;
+                data += ' ';
+            }
+            myfs::File f{filename};
+            f.truncate(data.size());
+            f.write(data.data(), data.size(), 0);
+            cout << "Data successfully written" << endl;
         } else if (cmd == "truncate") {
             string filename;
             int size;

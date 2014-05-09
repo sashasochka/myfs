@@ -17,6 +17,7 @@ struct File final {
     File(const Link& link);
     std::string filestat() const;
     void read(char* data, int size, int shift) const;
+    std::string cat() const;
     bool write(const char* data, int size, int shift);
     int size() const;
     bool truncate(int size);

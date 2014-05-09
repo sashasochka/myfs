@@ -291,10 +291,12 @@ bool unlink(const string& filename) {
 }
 
 File::File(const std::string& name): block_id(find_inode_block_id(name)) {
-
+    assert(block_id >= 0);
+    assert(is_mounted());
 }
 
 File::File(const Link& link): block_id(link.inode_block_id) {
+    assert(block_id >= 0);
     assert(is_mounted());
 }
 
@@ -346,6 +348,12 @@ void File::read(char* data, int size, int shift) const {
         size -= s;
         index += s;
     }
+}
+
+string File::cat() const {
+    vector<char> data(static_cast<size_t>(size()));
+    read(data.data(), data.size(), 0);
+    return string(data.begin(), data.end());
 }
 
 bool File::write(const char* data, int size, int shift) {
@@ -408,9 +416,9 @@ bool File::truncate(int size) {
             fill(tail_data + inode.size % BLOCK_SIZE, tail_data + BLOCK_SIZE, '\0');
             write_block(inode.data_block_ids[n_old_blocks - 1], tail_data);
         }
+        assert(n_blocks <= BLOCKS_PER_INODE);
         for (int block_id = n_old_blocks; block_id < n_blocks; ++block_id) {
             inode.data_block_ids[block_id] = ZERO_BLOCK;
-            assert(block_id < BLOCKS_PER_INODE);
         }
     }
 
