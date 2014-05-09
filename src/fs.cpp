@@ -41,6 +41,7 @@ bool is_mounted() {
 
 void read_block(int block_id, char* data, int size = BLOCK_SIZE, int shift = 0) {
     assert(is_mounted());
+    assert(block_id >= 0);
     assert(0 <= size);
     assert(0 <= shift);
     assert(size + shift <= BLOCK_SIZE);
@@ -53,6 +54,7 @@ void read_block(int block_id, char* data, int size = BLOCK_SIZE, int shift = 0) 
 
 void write_block(int block_id, const char* data, int size = BLOCK_SIZE, int shift = 0) {
     assert(is_mounted());
+    assert(block_id >= 0);
     assert(0 <= size);
     assert(0 <= shift);
     assert(size + shift <= BLOCK_SIZE);
@@ -64,6 +66,7 @@ void write_block(int block_id, const char* data, int size = BLOCK_SIZE, int shif
 }
 
 void block_mark_used(int block_id) {
+    assert(block_id >= 0);
     assert(is_mounted());
     fio.seekg(block_id / 8, fio.beg);
     int old_mask = fio.get();
@@ -76,6 +79,7 @@ void block_mark_used(int block_id) {
 }
 
 void block_mark_unused(int block_id) {
+    assert(block_id >= 0);
     assert(is_mounted());
     fio.seekg(block_id / 8, fio.beg);
     int old_mask = fio.get();
@@ -88,6 +92,7 @@ void block_mark_unused(int block_id) {
 }
 
 bool block_used(int block_id) {
+    assert(block_id >= 0);
     assert(is_mounted());
     fio.seekg(block_id / 8, fio.beg);
     return (fio.get() & (1 << (block_id % 8))) != 0;
@@ -189,15 +194,18 @@ bool create(const string& filename, FileType type) {
     if (find_inode_block_id(filename) != BAD_BLOCK) {
         return false;
     }
-    File root_dir{root_link};
-    int old_size = root_dir.size();
-    root_dir.truncate(old_size + sizeof(Link));
 
     int inode_block_id = find_empty_block();
     if (inode_block_id == -1) {
         return false;
     }
+
     block_mark_used(inode_block_id);
+
+    File root_dir{root_link};
+    int old_size = root_dir.size();
+    root_dir.truncate(old_size + sizeof(Link));
+
     // Create link in root directory
     Link lnk{};
     lnk.inode_block_id = inode_block_id;
