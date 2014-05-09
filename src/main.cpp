@@ -55,7 +55,7 @@ int main() {
             string target, name;
             cin >> target >> name;
             cout << (myfs::symlink(target, name) ? "Symlink created" : "Symlink wasn't created") << endl;
-        } else if (cmd == "filestat") {
+        } else if (cmd == "filestat" || cmd == "stat") {
             string filename;
             cin >> filename;
             myfs::File f{filename};
@@ -77,6 +77,7 @@ int main() {
             int size;
             cin >> filename;
             cin >> size;
+            if (cin.fail()) continue;
             myfs::File f{filename};
             cout << (f.truncate(size) ? "File was truncated" : "File wasn't trucated") << endl;
         } else {

@@ -353,8 +353,7 @@ bool File::truncate(int size) {
     auto& descr = *reinterpret_cast<Descriptor*>(descr_data);
     if (size == descr.size) return true;
 
-    int old_size = descr.size;
-    int n_old_blocks = old_size == 0 ? 0 : (old_size - 1) / BLOCK_SIZE + 1;
+    int n_old_blocks = descr.size == 0 ? 0 : (descr.size - 1) / BLOCK_SIZE + 1;
     int n_blocks = size == 0 ? 0 : (size - 1) / BLOCK_SIZE + 1;
     if (n_blocks < n_old_blocks) {
         for (int block_id = n_blocks; block_id < n_old_blocks; ++block_id) {
@@ -369,6 +368,7 @@ bool File::truncate(int size) {
         }
         for (int block_id = n_old_blocks; block_id < n_blocks; ++block_id) {
             descr.data_block_ids[block_id] = ZERO_BLOCK;
+            assert(block_id < BLOCKS_PER_DESCRIPTOR);
         }
     }
 
