@@ -361,7 +361,7 @@ bool File::truncate(int size) {
             block_mark_unused(descr.data_block_ids[block_id]);
         }
     } else {
-        if (size % BLOCK_SIZE != 0 && descr.data_block_ids[n_old_blocks - 1] != ZERO_BLOCK) {
+        if (descr.size % BLOCK_SIZE != 0 && descr.data_block_ids[n_old_blocks - 1] != ZERO_BLOCK) {
             char tail_data[BLOCK_SIZE];
             read_block(descr.data_block_ids[n_old_blocks - 1], tail_data);
             fill(tail_data + descr.size % BLOCK_SIZE, tail_data + BLOCK_SIZE, '\0');
