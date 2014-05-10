@@ -46,7 +46,8 @@ void read_block(int block_id, char* data, int size = BLOCK_SIZE, int shift = 0) 
     assert(0 <= shift);
     assert(size + shift <= BLOCK_SIZE);
     fio.seekg(block_id * BLOCK_SIZE + shift, fio.beg);
-    fio.get(data, size);
+    fio.read(data, size);
+    assert(fio.gcount() == size);
 #ifndef NDEBUG
     fio.flush();
 #endif
