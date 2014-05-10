@@ -77,10 +77,10 @@ void write_block(int block_id, const INode* inode) {
 void block_mark_used(int block_id) {
     assert(block_id >= n_bitmask_blocks);
     assert(is_mounted());
-    fio.seekg(block_id / 8, fio.beg);
+    fio.seekg((block_id - n_bitmask_blocks) / 8, fio.beg);
     int old_mask = fio.get();
     assert(old_mask >= 0);
-    fio.seekp(block_id / 8, fio.beg);
+    fio.seekp((block_id - n_bitmask_blocks) / 8, fio.beg);
     fio.put(static_cast<char>(old_mask | (1 << ((block_id - n_bitmask_blocks) % 8))));
 #ifndef NDEBUG
     fio.flush();
@@ -90,10 +90,10 @@ void block_mark_used(int block_id) {
 void block_mark_unused(int block_id) {
     assert(block_id >= n_bitmask_blocks);
     assert(is_mounted());
-    fio.seekg(block_id / 8, fio.beg);
+    fio.seekg((block_id - n_bitmask_blocks) / 8, fio.beg);
     int old_mask = fio.get();
     assert(old_mask >= 0);
-    fio.seekp(block_id / 8, fio.beg);
+    fio.seekp((block_id - n_bitmask_blocks) / 8, fio.beg);
     fio.put(static_cast<char>(old_mask & ~(1 << ((block_id - n_bitmask_blocks) % 8))));
 #ifndef NDEBUG
     fio.flush();
@@ -103,8 +103,8 @@ void block_mark_unused(int block_id) {
 bool block_used(int block_id) {
     assert(block_id >= n_bitmask_blocks);
     assert(is_mounted());
-    fio.seekg(block_id / 8, fio.beg);
-    return (fio.get() & (1 << (block_id % 8))) != 0;
+    fio.seekg((block_id - n_bitmask_blocks) / 8, fio.beg);
+    return (fio.get() & (1 << ((block_id - n_bitmask_blocks) % 8))) != 0;
 }
 
 int find_empty_block() {
@@ -116,9 +116,15 @@ int find_empty_block() {
                 for (int n_bit = 0; n_bit < 8; ++n_bit) {
                     if ((data[idx] & (1 << n_bit)) == 0) {
                         int result = (bitmask_block_id * BLOCK_SIZE + idx) * 8 + n_bit;
-                        return result < n_data_blocks ? result + n_bitmask_blocks : BAD_BLOCK;
+                        if (result >= n_data_blocks) {
+                            return BAD_BLOCK;
+                        }
+                        result = result + n_bitmask_blocks;
+                        assert(!block_used(result));
+                        return result;
                     }
                 }
+                assert(false);
             }
         }
     }
@@ -334,6 +340,22 @@ string File::filestat() const {
     result += to_string(block_id);
     result += '\n';
 
+    result += "Blocks uses(";
+    string blocks;
+    int blocks_used = 0;
+    for (int i = 0; i < (inode.size == 0 ? 0 : (inode.size - 1) / BLOCK_SIZE + 1); ++i) {
+        if (inode.data_block_ids[i] >= 0) {
+            blocks += '#';
+            blocks += to_string(inode.data_block_ids[i]);
+            blocks += ' ';
+            ++blocks_used;
+        }
+    }
+    result += to_string(blocks_used);
+    result += "): ";
+    result += blocks;
+    result += '\n';
+
     result += "Size: ";
     result += to_string(inode.size);
     result += " bytes";
@@ -433,8 +455,13 @@ bool File::truncate(int size) {
 
     int n_old_blocks = inode.size == 0 ? 0 : (inode.size - 1) / BLOCK_SIZE + 1;
     int n_blocks = size == 0 ? 0 : (size - 1) / BLOCK_SIZE + 1;
+    assert(n_blocks <= BLOCKS_PER_INODE && "too big file");
     if (n_blocks < n_old_blocks) {
-        for_each(inode.data_block_ids + n_blocks, inode.data_block_ids + n_old_blocks, block_mark_unused);
+        for (int block_index = n_blocks; block_index < n_old_blocks; ++block_index) {
+            if (inode.data_block_ids[block_index] >= 0) {
+                block_mark_unused(inode.data_block_ids[block_index]);
+            }
+        }
     } else {
         if (inode.size % BLOCK_SIZE != 0 && inode.data_block_ids[n_old_blocks - 1] != ZERO_BLOCK) {
             char tail_data[BLOCK_SIZE];
@@ -442,7 +469,6 @@ bool File::truncate(int size) {
             fill(tail_data + inode.size % BLOCK_SIZE, tail_data + BLOCK_SIZE, '\0');
             write_block(inode.data_block_ids[n_old_blocks - 1], tail_data);
         }
-        assert(n_blocks <= BLOCKS_PER_INODE);
         fill(inode.data_block_ids + n_old_blocks, inode.data_block_ids + n_blocks, ZERO_BLOCK);
     }
 
