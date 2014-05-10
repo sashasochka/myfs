@@ -24,7 +24,9 @@ int main() {
             myfs::umount();
             cout << "File system unmounted!" << endl;
         } else if (cmd == "ls") {
-            cout << myfs::ls();
+            string dirname;
+            cin >> dirname;
+            cout << myfs::ls(dirname);
         } else if (cmd == "create" || cmd == "touch") {
             string filename;
             cin >> filename;
@@ -99,7 +101,12 @@ int main() {
             string filename;
             cin >> filename;
             if (myfs::file_exists(filename)) {
-                cout << myfs::File{filename}.cat() << endl;
+                myfs::File f{filename};
+                if (f.type() != myfs::FileType::Directory) {
+                    cout << f.cat() << endl;
+                } else {
+                    cout << "Cannot read directory" << endl;
+                }
             } else {
                 cout << "File with name '" << filename << "' doesn't exist" << endl;
             }
@@ -121,11 +128,15 @@ int main() {
 
             if (myfs::file_exists(filename)) {
                 myfs::File f{filename};
-                f.truncate(data.size());
-                if (f.write(data.data(), data.size(), 0)) {
-                    cout << "Data successfully written" << endl;
+                if (f.type() != myfs::FileType::Directory) {
+                    f.truncate(data.size());
+                    if (f.write(data.data(), data.size(), 0)) {
+                        cout << "Data successfully written" << endl;
+                    } else {
+                        cout << "Cannot write data (probably not enough space)" << endl;
+                    }
                 } else {
-                    cout << "Cannot write data (probably not enough space)" << endl;
+                    cout << "Cannot write to directory" << endl;
                 }
 
             } else {

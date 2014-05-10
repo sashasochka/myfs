@@ -32,7 +32,7 @@ private:
 
 bool mount(const std::string& filename);
 void umount();
-std::string ls();
+std::string ls(const std::string& dirname = "/");
 int create(const std::string& filename, FileType type = FileType::Regular);
 bool link(const std::string& target, const std::string& name);
 bool unlink(const std::string& filename);

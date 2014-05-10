@@ -139,6 +139,10 @@ int find_empty_block() {
 }
 
 int find_inode_block_id(const string& filename) {
+    if (filename == "/") {
+        return root_link.inode_block_id;
+    }
+
     int dir_size = root_dir->size();
     vector<char> data(static_cast<size_t>(root_dir->size()));
     root_dir->read(data.data(), dir_size, 0);
@@ -219,7 +223,7 @@ void umount() {
     fio.close();
 }
 
-string ls() {
+string ls(const string& dirname) {
     int dir_size = root_dir->size();
     vector<char> data(static_cast<size_t>(root_dir->size()));
     root_dir->read(data.data(), dir_size, 0);
