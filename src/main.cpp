@@ -48,7 +48,7 @@ int main() {
             cin >> filename;
             if (!myfs::file_exists(filename)) {
                 cout << "File doesn't exist" << endl;
-            } else if (myfs::File(filename).type() == myfs::FileType::Directory) {
+            } else if (myfs::File(filename, false).type() == myfs::FileType::Directory) {
                 cout << "Cannot remove directory, use `rmdir` command" << endl;
             } else {
                 cout << (myfs::unlink(filename) ? "Hard link was removed" : "Hard link wasn't removed") << endl;
@@ -90,7 +90,7 @@ int main() {
             string filename;
             cin >> filename;
             if (myfs::file_exists(filename)) {
-                myfs::File f{filename};
+                myfs::File f{filename, false};
                 cout << f.filestat();
             } else {
                 cout << "File with name '" << filename << "' doesn't exist" << endl;

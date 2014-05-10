@@ -133,7 +133,7 @@ int find_empty_block() {
 }
 
 int find_inode_block_id(const string& filename) {
-    File root_dir{root_link};
+    File root_dir{root_link.inode_block_id, false};
     int dir_size = root_dir.size();
     vector<char> data(static_cast<size_t>(root_dir.size()));
     root_dir.read(data.data(), dir_size, 0);
@@ -148,6 +148,28 @@ int find_inode_block_id(const string& filename) {
     return BAD_BLOCK;
 }
 
+int inode_follow_symlinks(int inode_block_id, int max_follows = MAX_SYMLINK_FOLLOWS) {
+    assert(max_follows >= 0);
+    assert(inode_block_id >= 0);
+    INode inode;
+    read_block(inode_block_id, &inode);
+    if (inode.type != FileType::Symlink) {
+        return inode_block_id;
+    } else {
+        if (max_follows == 0) {
+            assert("Cyclic reference error");
+            return BAD_BLOCK;
+        }
+        File symlink{inode_block_id, false};
+        auto target_name = symlink.cat();
+        auto linked_inode_block_id = find_inode_block_id(target_name);
+        if (linked_inode_block_id == BAD_BLOCK) {
+            assert("Symbolic link points to nothing");
+            return BAD_BLOCK;
+        }
+        return inode_follow_symlinks(find_inode_block_id(target_name), max_follows - 1);
+    }
+}
 } // END OF INTERNAL LINKAGE SECTION
 
 
@@ -191,7 +213,7 @@ void umount() {
 }
 
 string ls() {
-    File root_dir{root_link};
+    File root_dir{root_link.inode_block_id, false};
     int dir_size = root_dir.size();
     vector<char> data(static_cast<size_t>(root_dir.size()));
     root_dir.read(data.data(), dir_size, 0);
@@ -221,7 +243,7 @@ int create(const string & filename, FileType type) {
 
     block_mark_used(inode_block_id);
 
-    File root_dir{root_link};
+    File root_dir{root_link.inode_block_id, false};
     int old_size = root_dir.size();
     root_dir.truncate(old_size + sizeof(Link));
 
@@ -246,7 +268,7 @@ bool link(const string& target, const string& name) {
     if (find_inode_block_id(name) != BAD_BLOCK) {
         return false;
     }
-    File root_dir{root_link};
+    File root_dir{root_link.inode_block_id, false};
     int dir_size = root_dir.size();
     vector<char> data(static_cast<size_t>(root_dir.size()));
     root_dir.read(data.data(), dir_size, 0);
@@ -274,7 +296,7 @@ bool unlink(const string& filename) {
     if (filename.size() > FILENAME_MAX_LENGTH) {
         return false;
     }
-    File root_dir{root_link};
+    File root_dir{root_link.inode_block_id, false};
     int old_size = root_dir.size();
 
     vector<char> data(static_cast<size_t>(root_dir.size()));
@@ -313,12 +335,12 @@ bool file_exists(const string& filename) {
     return find_inode_block_id(filename) != BAD_BLOCK;
 }
 
-File::File(const string& filename): block_id(find_inode_block_id(filename)) {
-    assert(block_id >= 0 && "file not found");
-    assert(is_mounted());
+File::File(const string& filename, bool follow_symlink) : File(find_inode_block_id(filename), follow_symlink) {
+
 }
 
-File::File(const Link& link): block_id(link.inode_block_id) {
+File::File(int block_id, bool follow_symlink):
+        block_id{follow_symlink ? inode_follow_symlinks(block_id) : block_id } {
     assert(block_id >= 0 && "file not found");
     assert(is_mounted());
 }
@@ -513,7 +535,13 @@ string pwd() {
 }
 
 bool symlink(const string& target, const string& name) {
-    // todo
-    return false;
+    int inode_block_id = create(name, FileType::Symlink);
+    if (inode_block_id == BAD_BLOCK) {
+        return false;
+    }
+    File file{inode_block_id, false};
+    file.truncate(target.size());
+    file.write(target.c_str(), target.size(), 0);
+    return true;
 }
 } // END OF NAMESPACE myfs

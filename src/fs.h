@@ -12,13 +12,11 @@ constexpr auto
     BLOCKS_PER_INODE = 126, // 14 (126)
     MAX_SYMLINK_FOLLOWS = 10;
 
-struct Link;
-
 enum class FileType { Regular, Directory, Symlink };
 
 struct File final {
-    File(const std::string& filename);
-    File(const Link& link);
+    File(const std::string& filename, bool follow_symlink = true);
+    File(int block_id, bool follow_symlink = true);
     std::string filestat() const;
     void read(char* data, int size, int shift) const;
     std::string cat() const;
