@@ -373,7 +373,9 @@ void File::read(char* data, int size, int shift) const {
 string File::cat() const {
     vector<char> data(static_cast<size_t>(size()));
     read(data.data(), data.size(), 0);
-    return string(data.begin(), data.end());
+    string result(data.begin(), data.end());
+    assert(result.size() == data.size());
+    return result;
 }
 
 bool File::write(const char* data, int size, int shift) {
