@@ -42,11 +42,11 @@ bool is_mounted() {
 
 void read_block(int block_id, char* data, int size = BLOCK_SIZE, int shift = 0) {
     assert(is_mounted());
-    assert(block_id >= 0);
+    assert(0 <= block_id && block_id < n_data_blocks + n_bitmask_blocks);
     assert(0 <= size);
     assert(0 <= shift);
     assert(size + shift <= BLOCK_SIZE);
-    fio.seekg((block_id + n_bitmask_blocks) * BLOCK_SIZE + shift, fio.beg);
+    fio.seekg(block_id * BLOCK_SIZE + shift, fio.beg);
     fio.get(data, size);
 #ifndef NDEBUG
     fio.flush();
@@ -59,11 +59,11 @@ void read_block(int block_id, INode* inode) {
 
 void write_block(int block_id, const char* data, int size = BLOCK_SIZE, int shift = 0) {
     assert(is_mounted());
-    assert(block_id >= 0);
+    assert(0 <= block_id && block_id < n_data_blocks + n_bitmask_blocks);
     assert(0 <= size);
     assert(0 <= shift);
     assert(size + shift <= BLOCK_SIZE);
-    fio.seekp((block_id + n_bitmask_blocks) * BLOCK_SIZE + shift, fio.beg);
+    fio.seekp(block_id * BLOCK_SIZE + shift, fio.beg);
     fio.write(data, size);
 #ifndef NDEBUG
     fio.flush();
@@ -75,47 +75,55 @@ void write_block(int block_id, const INode* inode) {
 }
 
 void block_mark_used(int block_id) {
-    assert(block_id >= 0);
+    assert(block_id >= n_bitmask_blocks);
     assert(is_mounted());
     fio.seekg(block_id / 8, fio.beg);
     int old_mask = fio.get();
     assert(old_mask >= 0);
     fio.seekp(block_id / 8, fio.beg);
-    fio.put(static_cast<char>(old_mask | (1 << (block_id % 8))));
+    fio.put(static_cast<char>(old_mask | (1 << ((block_id - n_bitmask_blocks) % 8))));
 #ifndef NDEBUG
     fio.flush();
 #endif
 }
 
 void block_mark_unused(int block_id) {
-    assert(block_id >= 0);
+    assert(block_id >= n_bitmask_blocks);
     assert(is_mounted());
     fio.seekg(block_id / 8, fio.beg);
     int old_mask = fio.get();
     assert(old_mask >= 0);
     fio.seekp(block_id / 8, fio.beg);
-    fio.put(static_cast<char>(old_mask & ~(1 << (block_id % 8))));
+    fio.put(static_cast<char>(old_mask & ~(1 << ((block_id - n_bitmask_blocks) % 8))));
 #ifndef NDEBUG
     fio.flush();
 #endif
 }
 
 bool block_used(int block_id) {
-    assert(block_id >= 0);
+    assert(block_id >= n_bitmask_blocks);
     assert(is_mounted());
     fio.seekg(block_id / 8, fio.beg);
     return (fio.get() & (1 << (block_id % 8))) != 0;
 }
 
 int find_empty_block() {
-    // Warning: very slow implementation: good optimizations are possible
-    // TODO make faster
-    for (int block_id = 0; block_id < n_data_blocks; ++block_id) {
-        if (!block_used(block_id)) {
-            return block_id;
+    for (int bitmask_block_id = 0; bitmask_block_id < n_bitmask_blocks; ++bitmask_block_id) {
+        char data[BLOCK_SIZE];
+        read_block(bitmask_block_id, data);
+        for (int idx = 0; idx < BLOCK_SIZE; ++idx) {
+            if (data[idx] != ~'\0') {
+                for (int n_bit = 0; n_bit < 8; ++n_bit) {
+                    if ((data[idx] & (1 << n_bit)) == 0) {
+                        int result = (bitmask_block_id * BLOCK_SIZE + idx) * 8 + n_bit;
+                        return result < n_data_blocks ? result + n_bitmask_blocks : BAD_BLOCK;
+                    }
+                }
+            }
         }
     }
-    return -1;
+
+    return BAD_BLOCK;
 }
 
 int find_inode_block_id(const string& filename) {
@@ -151,7 +159,7 @@ bool mount(const string& filename) {
     // measure how many blocks are used for bitmask
     n_bitmask_blocks = (device_capacity - 1) / (BLOCK_SIZE * BLOCK_SIZE * 8) + 1;
     n_data_blocks = (device_capacity - 1) / BLOCK_SIZE + 1 - n_bitmask_blocks;
-    root_link.inode_block_id = 0; // use the first block after bitmask
+    root_link.inode_block_id = n_bitmask_blocks; // use the first block after bitmask
     root_link.filename[0] = '\0';
 
     // if first time (device not formatted)
@@ -201,7 +209,7 @@ bool create(const string& filename, FileType type) {
     }
 
     int inode_block_id = find_empty_block();
-    if (inode_block_id == -1) {
+    if (inode_block_id == BAD_BLOCK) {
         return false;
     }
 
@@ -296,12 +304,12 @@ bool unlink(const string& filename) {
 }
 
 File::File(const std::string& name): block_id(find_inode_block_id(name)) {
-    assert(block_id >= 0);
+    assert(block_id >= 0 && "file not found");
     assert(is_mounted());
 }
 
 File::File(const Link& link): block_id(link.inode_block_id) {
-    assert(block_id >= 0);
+    assert(block_id >= 0 && "file not found");
     assert(is_mounted());
 }
 
@@ -376,7 +384,7 @@ bool File::write(const char* data, int size, int shift) {
         int& block_id = inode.data_block_ids[block_index];
         if (block_id == ZERO_BLOCK) {
             block_id = find_empty_block();
-            if (block_id == -1) {
+            if (block_id == BAD_BLOCK) {
                 return false;
             }
             block_mark_used(block_id);
