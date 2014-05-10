@@ -9,7 +9,8 @@ namespace myfs
 constexpr auto
     BLOCK_SIZE = 512, // 64 (512)
     FILENAME_MAX_LENGTH = 15,
-    BLOCKS_PER_INODE = 126; // 14 (126)
+    BLOCKS_PER_INODE = 126, // 14 (126)
+    MAX_SYMLINK_FOLLOWS = 10;
 
 struct Link;
 
@@ -34,7 +35,7 @@ private:
 bool mount(const std::string& filename);
 void umount();
 std::string ls();
-bool create(const std::string& filename, FileType type = FileType::Regular);
+int create(const std::string& filename, FileType type = FileType::Regular);
 bool link(const std::string& target, const std::string& name);
 bool unlink(const std::string& filename);
 bool file_exists(const std::string& filename);

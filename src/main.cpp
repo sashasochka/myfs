@@ -29,7 +29,7 @@ int main() {
             string filename;
             cin >> filename;
             if (!myfs::file_exists(filename)) {
-                cout << (myfs::create(filename) ? "File created" : "File wasn't created") << endl;
+                cout << (myfs::create(filename) >= 0 ? "File created" : "File wasn't created") << endl;
             } else {
                 cout << "File already exists!" << endl;
             }
@@ -84,7 +84,7 @@ int main() {
             } else if (myfs::file_exists(name)) {
                 cout << "File with name '" << name << "' already exists" << endl;
             } else {
-                cout << (myfs::symlink(name, target) ? "Symlink created" : "Symlink wasn't created") << endl;
+                cout << (myfs::symlink(target, name) ? "Symlink created" : "Symlink wasn't created") << endl;
             }
         } else if (cmd == "filestat" || cmd == "stat") {
             string filename;
@@ -107,13 +107,18 @@ int main() {
             string filename;
             cin >> filename;
             string data;
+            bool first = true;
             while (true) {
                 string s;
                 cin >> s;
                 if (s == "END") break;
+                if (!first) {
+                    data += ' ';
+                }
+                first = false;
                 data += s;
-                data += ' ';
             }
+
             if (myfs::file_exists(filename)) {
                 myfs::File f{filename};
                 f.truncate(data.size());

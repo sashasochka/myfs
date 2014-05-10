@@ -4,7 +4,6 @@
 #include <cassert>
 #include <cstring>
 #include <fstream>
-#include <iostream>
 
 using namespace std;
 
@@ -200,17 +199,17 @@ string ls() {
     return result;
 }
 
-bool create(const string& filename, FileType type) {
+int create(const string & filename, FileType type) {
     if (filename.size() > FILENAME_MAX_LENGTH) {
-        return false;
+        return BAD_BLOCK;
     }
     if (find_inode_block_id(filename) != BAD_BLOCK) {
-        return false;
+        return BAD_BLOCK;
     }
 
     int inode_block_id = find_empty_block();
     if (inode_block_id == BAD_BLOCK) {
-        return false;
+        return BAD_BLOCK;
     }
 
     block_mark_used(inode_block_id);
@@ -228,9 +227,9 @@ bool create(const string& filename, FileType type) {
     INode inode{};
     inode.size = 0;
     inode.n_links = 1;
-    inode.type = FileType::Regular;
+    inode.type = type;
     write_block(inode_block_id, &inode);
-    return true;
+    return inode_block_id;
 }
 
 bool link(const string& target, const string& name) {
@@ -324,7 +323,9 @@ string File::filestat() const {
     read_block(block_id, &inode);
 
     string result = "Type: ";
-    result += (inode.type == FileType::Regular ? "regular" : "directory");
+    result += (inode.type == FileType::Regular ? "regular" :
+            inode.type == FileType::Symlink ? "symlink" :
+            "directory");
     result += '\n';
 
 
