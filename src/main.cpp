@@ -54,7 +54,7 @@ int main() {
         } else if (cmd == "symlink") {
             string target, name;
             cin >> target >> name;
-            cout << (myfs::symlink(target, name) ? "Symlink created" : "Symlink wasn't created") << endl;
+            cout << (myfs::symlink(name, target) ? "Symlink created" : "Symlink wasn't created") << endl;
         } else if (cmd == "filestat" || cmd == "stat") {
             string filename;
             cin >> filename;

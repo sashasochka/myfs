@@ -1,3 +1,6 @@
+#ifndef FS_H
+#define FS_H
+
 #include <string>
 #include <vector>
 
@@ -37,5 +40,7 @@ bool mkdir(const std::string& dirname);
 bool rmdir(const std::string& dirname);
 bool cd(const std::string& dirname);
 std::string pwd();
-bool symlink(const std::string &name, const std::string &target);
+bool symlink(const std::string& target, const std::string& name);
 } // END OF NAMESPACE myfs
+
+#endif
