@@ -410,18 +410,20 @@ bool File::write(const char* data, int size, int shift) {
     int index = 0;
     bool inode_updated = false;
     while (size > 0) {
-        int block_index = shift / BLOCK_SIZE;
-        int& block_id = inode.data_block_ids[block_index];
-        if (block_id == ZERO_BLOCK) {
-            block_id = find_empty_block();
-            if (block_id == BAD_BLOCK) {
+        int next_block_index = shift / BLOCK_SIZE;
+        int& next_block_id = inode.data_block_ids[next_block_index];
+        if (next_block_id == ZERO_BLOCK) {
+            next_block_id = find_empty_block();
+            if (next_block_id == BAD_BLOCK) {
+                inode.size = shift;
+                write_block(block_id, &inode);
                 return false;
             }
-            block_mark_used(block_id);
+            block_mark_used(next_block_id);
             inode_updated = true;
         }
-        int s = min(size, ((block_index + 1) * BLOCK_SIZE) - shift);
-        write_block(block_id, data + index, s, shift % BLOCK_SIZE);
+        int s = min(size, ((next_block_index + 1) * BLOCK_SIZE) - shift);
+        write_block(next_block_id, data + index, s, shift % BLOCK_SIZE);
         shift += s;
         size -= s;
         index += s;

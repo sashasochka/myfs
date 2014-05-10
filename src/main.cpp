@@ -122,8 +122,12 @@ int main() {
             if (myfs::file_exists(filename)) {
                 myfs::File f{filename};
                 f.truncate(data.size());
-                f.write(data.data(), data.size(), 0);
-                cout << "Data successfully written" << endl;
+                if (f.write(data.data(), data.size(), 0)) {
+                    cout << "Data successfully written" << endl;
+                } else {
+                    cout << "Cannot write data (probably not enough space)" << endl;
+                }
+
             } else {
                 cout << "File with name '" << filename << "' doesn't exist" << endl;
             }
