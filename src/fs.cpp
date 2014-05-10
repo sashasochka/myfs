@@ -303,7 +303,11 @@ bool unlink(const string& filename) {
     return false;
 }
 
-File::File(const std::string& name): block_id(find_inode_block_id(name)) {
+bool file_exists(const string& filename) {
+    return find_inode_block_id(filename) != BAD_BLOCK;
+}
+
+File::File(const string& filename): block_id(find_inode_block_id(filename)) {
     assert(block_id >= 0 && "file not found");
     assert(is_mounted());
 }
@@ -407,6 +411,13 @@ int File::size() const {
     INode inode;
     read_block(block_id, &inode);
     return inode.size;
+}
+
+FileType File::type() const {
+    assert(is_mounted());
+    INode inode;
+    read_block(block_id, &inode);
+    return inode.type;
 }
 
 bool File::truncate(int size) {

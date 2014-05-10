@@ -16,13 +16,14 @@ struct Link;
 enum class FileType { Regular, Directory, Symlink };
 
 struct File final {
-    File(const std::string& name);
+    File(const std::string& filename);
     File(const Link& link);
     std::string filestat() const;
     void read(char* data, int size, int shift) const;
     std::string cat() const;
     bool write(const char* data, int size, int shift);
     int size() const;
+    FileType type() const;
     bool truncate(int size);
     void close() const;
     ~File();
@@ -36,6 +37,7 @@ std::string ls();
 bool create(const std::string& filename, FileType type = FileType::Regular);
 bool link(const std::string& target, const std::string& name);
 bool unlink(const std::string& filename);
+bool file_exists(const std::string& filename);
 bool mkdir(const std::string& dirname);
 bool rmdir(const std::string& dirname);
 bool cd(const std::string& dirname);
