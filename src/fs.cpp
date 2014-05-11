@@ -314,12 +314,12 @@ int create(const string& path, FileType type) {
     dir.truncate(old_dir_size + sizeof(Link));
 
     // Create link in root directory
-    Link lnk{};
+    Link lnk;
     lnk.inode_block_id = inode_block_id;
     strcpy(lnk.filename, filename.c_str());
     dir.write(reinterpret_cast<char*>(&lnk), sizeof(Link), old_dir_size);
 
-    INode inode{};
+    INode inode;
     inode.size = 0;
     inode.n_links = 1;
     inode.type = type;
