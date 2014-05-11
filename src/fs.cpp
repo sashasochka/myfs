@@ -4,7 +4,6 @@
 #include <cassert>
 #include <cstring>
 #include <fstream>
-#include <memory>
 
 using namespace std;
 
@@ -35,7 +34,23 @@ auto n_bitmask_blocks = -1;
 auto n_data_blocks = -1;
 fstream fio;
 Link root_link;
-unique_ptr<File> root_dir;
+
+bool is_mounted();
+int div_ceil(int a, int b);
+void read_block(int block_id, char* data, int size = BLOCK_SIZE, int shift = 0);
+void read_block(int block_id, INode* inode);
+void write_block(int block_id, const char* data, int size = BLOCK_SIZE, int shift = 0);
+void write_block(int block_id, const INode* inode);
+void block_mark_used(int block_id);
+void block_mark_unused(int block_id);
+bool block_used(int block_id);
+int find_empty_block();
+int find_inode_block_id(const string& path);
+string get_file_directory(const string& path);
+string get_filename(const string& path);
+int dir_find_file_inode(const File& dir, const string& filename);
+int inode_follow_symlinks(int inode_block_id, int max_follows = MAX_SYMLINK_FOLLOWS);
+int inode_follow_symlinks(int inode_block_id, int max_follows);
 
 bool is_mounted() {
     return device_capacity != -1 && fio.is_open();
@@ -45,7 +60,7 @@ int div_ceil(int a, int b) {
     return a == 0 ? 0 : (a - 1) / b + 1;
 }
 
-void read_block(int block_id, char* data, int size = BLOCK_SIZE, int shift = 0) {
+void read_block(int block_id, char* data, int size, int shift) {
     assert(is_mounted());
     assert(0 <= block_id && block_id < n_data_blocks + n_bitmask_blocks);
     assert(0 <= size);
@@ -63,7 +78,7 @@ void read_block(int block_id, INode* inode) {
     read_block(block_id, reinterpret_cast<char*>(inode));
 }
 
-void write_block(int block_id, const char* data, int size = BLOCK_SIZE, int shift = 0) {
+void write_block(int block_id, const char* data, int size, int shift) {
     assert(is_mounted());
     assert(0 <= block_id && block_id < n_data_blocks + n_bitmask_blocks);
     assert(0 <= size);
@@ -138,18 +153,13 @@ int find_empty_block() {
     return BAD_BLOCK;
 }
 
-int find_inode_block_id(const string& filename) {
-    if (filename == "/") {
-        return root_link.inode_block_id;
-    }
-
-    int dir_size = root_dir->size();
-    vector<char> data(static_cast<size_t>(root_dir->size()));
-    root_dir->read(data.data(), dir_size, 0);
-    assert(dir_size % sizeof(Link) == 0);
+int dir_find_file_inode(const File& dir, const string& filename) {
+    int dir_size = dir.size();
+    auto data = dir.cat();
+    assert(data.size() % sizeof(Link) == 0);
 
     for (int n_file = 0; n_file < dir_size / sizeof(Link); ++n_file) {
-        auto& lnk = *reinterpret_cast<Link*>(data.data() + n_file * sizeof(Link));
+        auto& lnk = *reinterpret_cast<const Link*>(data.data() + n_file * sizeof(Link));
         if (lnk.filename == filename) {
             return lnk.inode_block_id;
         }
@@ -157,7 +167,52 @@ int find_inode_block_id(const string& filename) {
     return BAD_BLOCK;
 }
 
-int inode_follow_symlinks(int inode_block_id, int max_follows = MAX_SYMLINK_FOLLOWS) {
+string get_file_directory(const string& path) {
+    const auto sep_index = path.find_last_of('/');
+    if (sep_index == string::npos) {
+        return "/";
+    } else {
+        return path.substr(0, sep_index);
+    }
+}
+
+string get_filename(const string& path) {
+    const auto sep_index = path.find_last_of('/');
+    if (sep_index == string::npos) {
+        return path;
+    } else {
+        return path.substr(sep_index + 1);
+    }
+}
+
+int find_inode_block_id(const string& path) {
+    if (path.size() == 1 && path[0] == DIRECTORY_SEPARATOR) {
+        return root_link.inode_block_id;
+    }
+    int dir_inode = root_link.inode_block_id;
+    size_t start = 1;
+    if (path[0] != DIRECTORY_SEPARATOR) {
+        start = 0;
+        // fixme for local paths (add cwd)
+    }
+    while (true) {
+        auto sep_index = path.find(DIRECTORY_SEPARATOR, start);
+        if (sep_index == string::npos) {
+            auto filename = path.substr(start);
+            return dir_find_file_inode(File{dir_inode}, filename);
+        } else {
+            auto subdirname = path.substr(start, sep_index - start);
+            if (subdirname == ".") continue;
+            dir_inode =  dir_find_file_inode(File{dir_inode}, subdirname);
+            start = sep_index + 1;
+            if (dir_inode == BAD_BLOCK) {
+                return BAD_BLOCK;
+            }
+        }
+    }
+}
+
+int inode_follow_symlinks(int inode_block_id, int max_follows) {
     assert(max_follows >= 0);
     assert(inode_block_id >= 0);
     INode inode;
@@ -210,7 +265,6 @@ bool mount(const string& filename) {
         root_inode.type = FileType::Directory;
         write_block(root_link.inode_block_id, &root_inode);
     }
-    root_dir = unique_ptr<File>(new File{root_link.inode_block_id});
 
     return true;
 }
@@ -219,14 +273,14 @@ void umount() {
     device_capacity = -1;
     n_bitmask_blocks = -1;
     n_data_blocks = -1;
-    root_dir.reset();
     fio.close();
 }
 
 string ls(const string& dirname) {
-    int dir_size = root_dir->size();
-    vector<char> data(static_cast<size_t>(root_dir->size()));
-    root_dir->read(data.data(), dir_size, 0);
+    File dir{dirname};
+    int dir_size = dir.size();
+    vector<char> data(static_cast<size_t>(dir_size));
+    dir.read(data.data(), dir_size, 0);
     assert(dir_size % sizeof(Link) == 0);
     string result;
     for (int n_file = 0; n_file < dir_size / sizeof(Link); ++n_file) {
@@ -238,11 +292,8 @@ string ls(const string& dirname) {
     return result;
 }
 
-int create(const string & filename, FileType type) {
-    if (filename.size() > FILENAME_MAX_LENGTH) {
-        return BAD_BLOCK;
-    }
-    if (find_inode_block_id(filename) != BAD_BLOCK) {
+int create(const string& path, FileType type) {
+    if (find_inode_block_id(path) != BAD_BLOCK) {
         return BAD_BLOCK;
     }
 
@@ -253,14 +304,20 @@ int create(const string & filename, FileType type) {
 
     block_mark_used(inode_block_id);
 
-    int old_size = root_dir->size();
-    root_dir->truncate(old_size + sizeof(Link));
+    auto dirname = get_file_directory(path);
+    auto filename = get_filename(path);
+    if (filename.size() > FILENAME_MAX_LENGTH) {
+        return BAD_BLOCK;
+    }
+    File dir{dirname};
+    int old_dir_size = dir.size();
+    dir.truncate(old_dir_size + sizeof(Link));
 
     // Create link in root directory
     Link lnk{};
     lnk.inode_block_id = inode_block_id;
     strcpy(lnk.filename, filename.c_str());
-    root_dir->write(reinterpret_cast<char*>(&lnk), sizeof(Link), old_size);
+    dir.write(reinterpret_cast<char*>(&lnk), sizeof(Link), old_dir_size);
 
     INode inode{};
     inode.size = 0;
@@ -270,46 +327,57 @@ int create(const string & filename, FileType type) {
     return inode_block_id;
 }
 
-bool link(const string& target, const string& name) {
-    if (name.size() > FILENAME_MAX_LENGTH) {
+bool link(const string& target, const string& name_path) {
+    int target_inode = find_inode_block_id(target);
+    if (target_inode == BAD_BLOCK || find_inode_block_id(name_path) != BAD_BLOCK) {
         return false;
     }
-    if (find_inode_block_id(name) != BAD_BLOCK) {
-        return false;
-    }
-    int dir_size = root_dir->size();
-    vector<char> data(static_cast<size_t>(root_dir->size()));
-    root_dir->read(data.data(), dir_size, 0);
-    assert(dir_size % sizeof(Link) == 0);
 
-    for (int n_file = 0; n_file < dir_size / sizeof(Link); ++n_file) {
-        auto& lnk = *reinterpret_cast<Link*>(data.data() + n_file * sizeof(Link));
-        if (lnk.filename == target) {
-            strcpy(lnk.filename, name.c_str());
-            root_dir->truncate(dir_size + sizeof(Link));
-            root_dir->write(reinterpret_cast<char*>(&lnk), sizeof(Link), dir_size);
-
-            // add link
-            INode inode;
-            read_block(lnk.inode_block_id, &inode);
-            inode.n_links += 1;
-            write_block(lnk.inode_block_id, &inode);
-            return true;
-        }
+    auto dirname = get_file_directory(name_path);
+    auto filename = get_filename(name_path);
+    if (filename.size() > FILENAME_MAX_LENGTH) {
+        return BAD_BLOCK;
     }
-    return false;
+
+    File dir{dirname};
+    auto s_data = dir.cat();
+    vector<char> data(s_data.begin(), s_data.end());
+    int old_dir_size = data.size();
+    assert(old_dir_size % sizeof(Link) == 0);
+
+    Link lnk;
+    strcpy(lnk.filename, filename.c_str());
+    lnk.inode_block_id = target_inode;
+    dir.truncate(old_dir_size + sizeof(Link));
+    dir.write(reinterpret_cast<char*>(&lnk), sizeof(Link), old_dir_size);
+
+    // add link
+    INode inode;
+    read_block(target_inode, &inode);
+    inode.n_links += 1;
+    write_block(target_inode, &inode);
+    return true;
 }
 
-bool unlink(const string& filename) {
-    if (filename.size() > FILENAME_MAX_LENGTH) {
+bool unlink(const string& path) {
+    int target_inode = find_inode_block_id(path);
+    if (target_inode == BAD_BLOCK) {
         return false;
     }
-    int old_size = root_dir->size();
 
-    vector<char> data(static_cast<size_t>(root_dir->size()));
-    root_dir->read(data.data(), old_size, 0);
-    assert(old_size % sizeof(Link) == 0);
-    for (int n_file = 0; n_file < old_size / sizeof(Link); ++n_file) {
+    auto dirname = get_file_directory(path);
+    auto filename = get_filename(path);
+
+    if (path.size() > FILENAME_MAX_LENGTH) {
+        return false;
+    }
+
+    File dir{dirname};
+    auto s_data = dir.cat();
+    vector<char> data(s_data.begin(), s_data.end());
+    int old_dir_size = data.size();
+    assert(old_dir_size % sizeof(Link) == 0);
+    for (int n_file = 0; n_file < old_dir_size / sizeof(Link); ++n_file) {
         auto& lnk = *reinterpret_cast<Link*>(data.data() + n_file * sizeof(Link));
         if (lnk.filename == filename) {
             INode inode;
@@ -328,9 +396,9 @@ bool unlink(const string& filename) {
                 write_block(lnk.inode_block_id, &inode);
             }
 
-            root_dir->read(reinterpret_cast<char*>(&lnk), sizeof(Link), old_size - sizeof(Link));
-            root_dir->write(reinterpret_cast<char*>(&lnk), sizeof(Link), n_file * sizeof(Link));
-            root_dir->truncate(old_size - sizeof(Link));
+            dir.read(reinterpret_cast<char*>(&lnk), sizeof(Link), old_dir_size - sizeof(Link));
+            dir.write(reinterpret_cast<char*>(&lnk), sizeof(Link), n_file * sizeof(Link));
+            dir.truncate(old_dir_size - sizeof(Link));
             return true;
         }
     }
@@ -359,9 +427,18 @@ string File::filestat() const {
     read_block(block_id, &inode);
 
     string result = "Type: ";
-    result += (inode.type == FileType::Regular ? "regular" :
-            inode.type == FileType::Symlink ? "symlink" :
-            "directory");
+    if (inode.type == FileType::Regular) {
+        result += "regular";
+    } else if (inode.type == FileType::Symlink) {
+        result += "symlink\n";
+        result += "Points to: ";
+        result += cat();
+    } else {
+        // directory
+        result += "directory\n";
+        result += "Contains files: ";
+        result += to_string(inode.size / sizeof(Link));
+    }
     result += '\n';
 
 
@@ -518,8 +595,7 @@ File::~File() {
 
 // lab 2
 bool mkdir(const string& dirname) {
-    // todo
-    return false;
+    return create(dirname, FileType::Directory) != BAD_BLOCK;
 }
 
 bool rmdir(const string& dirname) {

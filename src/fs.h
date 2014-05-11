@@ -12,6 +12,8 @@ constexpr auto
     BLOCKS_PER_INODE = 126, // 14 (126)
     MAX_SYMLINK_FOLLOWS = 10;
 
+constexpr auto DIRECTORY_SEPARATOR = '/';
+
 enum class FileType { Regular, Directory, Symlink };
 
 struct File final {
@@ -33,9 +35,9 @@ private:
 bool mount(const std::string& filename);
 void umount();
 std::string ls(const std::string& dirname = "/");
-int create(const std::string& filename, FileType type = FileType::Regular);
-bool link(const std::string& target, const std::string& name);
-bool unlink(const std::string& filename);
+int create(const std::string& path, FileType type = FileType::Regular);
+bool link(const std::string& target, const std::string& name_path);
+bool unlink(const std::string& path);
 bool file_exists(const std::string& filename);
 bool mkdir(const std::string& dirname);
 bool rmdir(const std::string& dirname);

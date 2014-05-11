@@ -10,6 +10,7 @@
       <w>mkdir</w>
       <w>myfs</w>
       <w>rmdir</w>
+      <w>subdirname</w>
       <w>umount</w>
     </words>
   </dictionary>
