@@ -13,6 +13,7 @@ constexpr auto
     MAX_SYMLINK_FOLLOWS = 10;
 
 constexpr auto DIRECTORY_SEPARATOR = '/';
+const std::string ROOTDIR_NAME = "/";
 
 enum class FileType { Regular, Directory, Symlink };
 

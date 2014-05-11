@@ -50,7 +50,7 @@ string get_file_directory(const string& path);
 string get_filename(const string& path);
 int dir_find_file_inode(const File& dir, const string& filename);
 int inode_follow_symlinks(int inode_block_id, int max_follows = MAX_SYMLINK_FOLLOWS);
-int inode_follow_symlinks(int inode_block_id, int max_follows);
+void dereference_inode(int inode_id);
 
 bool is_mounted() {
     return device_capacity != -1 && fio.is_open();
@@ -154,8 +154,8 @@ int find_empty_block() {
 }
 
 int dir_find_file_inode(const File& dir, const string& filename) {
-    int dir_size = dir.size();
     auto data = dir.cat();
+    int dir_size = data.size();
     assert(data.size() % sizeof(Link) == 0);
 
     for (int n_file = 0; n_file < dir_size / sizeof(Link); ++n_file) {
@@ -186,7 +186,7 @@ string get_filename(const string& path) {
 }
 
 int find_inode_block_id(const string& path) {
-    if (path.size() == 1 && path[0] == DIRECTORY_SEPARATOR) {
+    if (path == ROOTDIR_NAME) {
         return root_inode_id;
     }
     int dir_inode = root_inode_id;
@@ -232,6 +232,24 @@ int inode_follow_symlinks(int inode_block_id, int max_follows) {
             return BAD_BLOCK;
         }
         return inode_follow_symlinks(find_inode_block_id(target_name), max_follows - 1);
+    }
+}
+
+void dereference_inode(int inode_id) {
+    INode inode;
+    read_block(inode_id, &inode);
+
+    if (inode.n_links == 1) {
+        for (int block_index = 0; block_index * BLOCK_SIZE < inode.size; ++block_index) {
+            int block_id = inode.data_block_ids[block_index];
+            if (block_id != ZERO_BLOCK) {
+                block_mark_unused(block_id);
+            }
+        }
+        block_mark_unused(inode_id);
+    } else {
+        --inode.n_links;
+        write_block(inode_id, &inode);
     }
 }
 } // END OF INTERNAL LINKAGE SECTION
@@ -379,22 +397,7 @@ bool unlink(const string& path) {
     for (int n_file = 0; n_file < old_dir_size / sizeof(Link); ++n_file) {
         auto& lnk = *reinterpret_cast<Link*>(data.data() + n_file * sizeof(Link));
         if (lnk.filename == filename) {
-            INode inode;
-            read_block(lnk.inode_block_id, &inode);
-
-            if (inode.n_links == 1) {
-                for (int block_index = 0; block_index * BLOCK_SIZE < inode.size; ++block_index) {
-                    int block_id = inode.data_block_ids[block_index];
-                    if (block_id != ZERO_BLOCK) {
-                        block_mark_unused(block_id);
-                    }
-                }
-                block_mark_unused(lnk.inode_block_id);
-            } else {
-                --inode.n_links;
-                write_block(lnk.inode_block_id, &inode);
-            }
-
+            dereference_inode(lnk.inode_block_id);
             dir.read(reinterpret_cast<char*>(&lnk), sizeof(Link), old_dir_size - sizeof(Link));
             dir.write(reinterpret_cast<char*>(&lnk), sizeof(Link), n_file * sizeof(Link));
             dir.truncate(old_dir_size - sizeof(Link));
@@ -592,14 +595,26 @@ File::~File() {
     close();
 }
 
-// lab 2
+// lab 4
 bool mkdir(const string& dirname) {
     return create(dirname, FileType::Directory) != BAD_BLOCK;
 }
 
 bool rmdir(const string& dirname) {
-    // todo
-    return false;
+    if (dirname == ROOTDIR_NAME) {
+        return false;
+    }
+    File dir{dirname};
+    auto data = dir.cat();
+    int dir_size = data.size();
+    assert(data.size() % sizeof(Link) == 0);
+
+    for (int n_file = 0; n_file < dir_size / sizeof(Link); ++n_file) {
+        auto& lnk = *reinterpret_cast<const Link*>(data.data() + n_file * sizeof(Link));
+        dereference_inode(lnk.inode_block_id);
+    }
+    unlink(dirname);
+    return true;
 }
 
 bool cd(const string& dirname) {
