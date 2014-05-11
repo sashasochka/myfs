@@ -29,11 +29,11 @@ static_assert(sizeof(INode) != BLOCK_SIZE, "INode size != BLOCK_SIZE");
 constexpr int ZERO_BLOCK = -1;
 constexpr int BAD_BLOCK = -2;
 
+auto root_inode_id = -1;
 auto device_capacity = -1;
 auto n_bitmask_blocks = -1;
 auto n_data_blocks = -1;
 fstream fio;
-Link root_link;
 
 bool is_mounted();
 int div_ceil(int a, int b);
@@ -168,7 +168,7 @@ int dir_find_file_inode(const File& dir, const string& filename) {
 }
 
 string get_file_directory(const string& path) {
-    const auto sep_index = path.find_last_of('/');
+    const auto sep_index = path.find_last_of(DIRECTORY_SEPARATOR);
     if (sep_index == string::npos) {
         return "/";
     } else {
@@ -177,7 +177,7 @@ string get_file_directory(const string& path) {
 }
 
 string get_filename(const string& path) {
-    const auto sep_index = path.find_last_of('/');
+    const auto sep_index = path.find_last_of(DIRECTORY_SEPARATOR);
     if (sep_index == string::npos) {
         return path;
     } else {
@@ -187,9 +187,9 @@ string get_filename(const string& path) {
 
 int find_inode_block_id(const string& path) {
     if (path.size() == 1 && path[0] == DIRECTORY_SEPARATOR) {
-        return root_link.inode_block_id;
+        return root_inode_id;
     }
-    int dir_inode = root_link.inode_block_id;
+    int dir_inode = root_inode_id;
     size_t start = 1;
     if (path[0] != DIRECTORY_SEPARATOR) {
         start = 0;
@@ -251,19 +251,18 @@ bool mount(const string& filename) {
     // measure how many blocks are used for bitmask
     n_bitmask_blocks = div_ceil(device_capacity, BLOCK_SIZE * BLOCK_SIZE * 8);
     n_data_blocks = div_ceil(device_capacity, BLOCK_SIZE);
-    root_link.inode_block_id = n_bitmask_blocks; // use the first block after bitmask
-    root_link.filename[0] = '\0';
+    root_inode_id = n_bitmask_blocks; // use the first block after bitmask
 
     // if first time (device not formatted)
-    if (!block_used(root_link.inode_block_id)) {
+    if (!block_used(root_inode_id)) {
         // FORMAT IT! (via creating root directory)
-        block_mark_used(root_link.inode_block_id);
+        block_mark_used(root_inode_id);
 
         INode root_inode;
         root_inode.n_links = 1;
         root_inode.size = 0;
         root_inode.type = FileType::Directory;
-        write_block(root_link.inode_block_id, &root_inode);
+        write_block(root_inode_id, &root_inode);
     }
 
     return true;
