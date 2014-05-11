@@ -7,6 +7,7 @@ using namespace std;
 int main() {
     while (true) {
         cin.clear();
+        cout << ">>> ";
         string cmd;
         cin >> cmd;
         if (cin.eof()) {
@@ -23,7 +24,9 @@ int main() {
         } else if (cmd == "umount") {
             myfs::umount();
             cout << "File system unmounted!" << endl;
-        } else if (cmd == "ls") {
+        } else if (cmd == "l") {
+            cout << myfs::ls();
+        }  else if (cmd == "ls") {
             string dirname;
             cin >> dirname;
             cout << myfs::ls(dirname);
