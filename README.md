@@ -34,6 +34,14 @@ Known bugs:
   - some functions are just hanging if some incorrect data is passed. They should return some error code etc.
   
 
+There are the following command aliases:
+
+  - create <-> touch
+  - read <-> cat
+  - l <-> ls .
+  - unlink <-> rm
+  - filestat <-> stat
+
 Example usage 
 
 
