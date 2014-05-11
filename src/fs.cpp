@@ -221,14 +221,14 @@ int inode_follow_symlinks(int inode_block_id, int max_follows) {
         return inode_block_id;
     } else {
         if (max_follows == 0) {
-            assert("Cyclic reference error");
+            assert(false && "Cyclic reference error");
             return BAD_BLOCK;
         }
         File symlink{inode_block_id, false};
         auto target_name = symlink.cat();
         auto linked_inode_block_id = find_inode_block_id(target_name);
         if (linked_inode_block_id == BAD_BLOCK) {
-            assert("Symbolic link points to nothing");
+            assert(false && "Symbolic link points to nothing");
             return BAD_BLOCK;
         }
         return inode_follow_symlinks(find_inode_block_id(target_name), max_follows - 1);
