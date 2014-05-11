@@ -33,6 +33,7 @@ auto root_inode_id = -1;
 auto device_capacity = -1;
 auto n_bitmask_blocks = -1;
 auto n_data_blocks = -1;
+string cwd = ROOTDIR_NAME;
 fstream fio;
 
 bool is_mounted();
@@ -51,6 +52,7 @@ string get_filename(const string& path);
 int dir_find_file_inode(const File& dir, const string& filename);
 int inode_follow_symlinks(int inode_block_id, int max_follows = MAX_SYMLINK_FOLLOWS);
 void dereference_inode(int inode_id);
+string join_path(string part1, string part2);
 
 bool is_mounted() {
     return device_capacity != -1 && fio.is_open();
@@ -154,6 +156,9 @@ int find_empty_block() {
 }
 
 int dir_find_file_inode(const File& dir, const string& filename) {
+    if (filename == ".") {
+        return dir.inode_id();
+    }
     auto data = dir.cat();
     int dir_size = data.size();
     assert(data.size() % sizeof(Link) == 0);
@@ -168,16 +173,19 @@ int dir_find_file_inode(const File& dir, const string& filename) {
 }
 
 string get_file_directory(const string& path) {
-    const auto sep_index = path.find_last_of(DIRECTORY_SEPARATOR);
+    assert(path != ROOTDIR_NAME);
+    const auto sep_index = path.find_last_of(PATH_SEPARATOR);
     if (sep_index == string::npos) {
-        return "/";
+        return cwd;
     } else {
-        return path.substr(0, sep_index);
+        auto dirname = path.substr(0, sep_index);
+        auto abs_dirname = dirname[0] == PATH_SEPARATOR ? dirname : join_path(cwd, dirname);
+        return abs_dirname;
     }
 }
 
 string get_filename(const string& path) {
-    const auto sep_index = path.find_last_of(DIRECTORY_SEPARATOR);
+    const auto sep_index = path.find_last_of(PATH_SEPARATOR);
     if (sep_index == string::npos) {
         return path;
     } else {
@@ -186,25 +194,22 @@ string get_filename(const string& path) {
 }
 
 int find_inode_block_id(const string& path) {
-    if (path == ROOTDIR_NAME) {
+    const string absolute_path = path[0] != PATH_SEPARATOR ? join_path(cwd, path) : path;
+    if (absolute_path == ROOTDIR_NAME) {
         return root_inode_id;
     }
     int dir_inode = root_inode_id;
     size_t start = 1;
-    if (path[0] != DIRECTORY_SEPARATOR) {
-        start = 0;
-        // fixme for local paths (add cwd)
-    }
     while (true) {
-        auto sep_index = path.find(DIRECTORY_SEPARATOR, start);
+        auto sep_index = absolute_path.find(PATH_SEPARATOR, start);
         if (sep_index == string::npos) {
-            auto filename = path.substr(start);
+            auto filename = absolute_path.substr(start);
             return dir_find_file_inode(File{dir_inode}, filename);
         } else {
-            auto subdirname = path.substr(start, sep_index - start);
-            if (subdirname == ".") continue;
-            dir_inode =  dir_find_file_inode(File{dir_inode}, subdirname);
+            auto subdirname = absolute_path.substr(start, sep_index - start);
             start = sep_index + 1;
+            if (subdirname == ".") continue;
+            dir_inode = dir_find_file_inode(File{dir_inode}, subdirname);
             if (dir_inode == BAD_BLOCK) {
                 return BAD_BLOCK;
             }
@@ -251,6 +256,13 @@ void dereference_inode(int inode_id) {
         --inode.n_links;
         write_block(inode_id, &inode);
     }
+}
+
+string join_path(string part1, string part2) {
+    if (part1 == ROOTDIR_NAME) {
+        return PATH_SEPARATOR + part2;
+    }
+    return part1 + PATH_SEPARATOR + part2;
 }
 } // END OF INTERNAL LINKAGE SECTION
 
@@ -307,6 +319,10 @@ string ls(const string& dirname) {
     }
 
     return result;
+}
+
+std::string ls() {
+    return ls(cwd);
 }
 
 int create(const string& path, FileType type) {
@@ -556,6 +572,10 @@ FileType File::type() const {
     return inode.type;
 }
 
+int File::inode_id() const {
+    return block_id;
+}
+
 bool File::truncate(int size) {
     assert(is_mounted());
     INode inode;
@@ -618,14 +638,30 @@ bool rmdir(const string& dirname) {
 }
 
 bool cd(const string& dirname) {
-    // todo
-    return false;
+    // fixme VERY bad and ad-hoc solution for paths with ".." and "."
+    if (dirname == ".") return true;
+    if (dirname == "..") {
+        auto sep_pos = cwd.find_last_of(PATH_SEPARATOR);
+        if (sep_pos == string::npos) {
+            return false;
+        } else if (sep_pos == 0) {
+            cwd = ROOTDIR_NAME;
+        } else {
+            cwd = cwd.substr(0, sep_pos);
+        }
+        return true;
+    }
+    auto new_cwd = join_path(cwd, dirname);
+    if (!file_exists(new_cwd)) {
+        return false;
+    }
+    cwd = new_cwd;
+    return true;
 }
 
 string pwd() {
-    // todo
     if (is_mounted()) {
-        return "/";
+        return cwd;
     } else {
         return "NOT MOUNTED!";
     }

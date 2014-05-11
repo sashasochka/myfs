@@ -12,7 +12,7 @@ constexpr auto
     BLOCKS_PER_INODE = 126, // 14 (126)
     MAX_SYMLINK_FOLLOWS = 10;
 
-constexpr auto DIRECTORY_SEPARATOR = '/';
+constexpr auto PATH_SEPARATOR = '/';
 const std::string ROOTDIR_NAME = "/";
 
 enum class FileType { Regular, Directory, Symlink };
@@ -26,6 +26,7 @@ struct File final {
     bool write(const char* data, int size, int shift);
     int size() const;
     FileType type() const;
+    int inode_id() const;
     bool truncate(int size);
     void close() const;
     ~File();
@@ -35,7 +36,8 @@ private:
 
 bool mount(const std::string& filename);
 void umount();
-std::string ls(const std::string& dirname = "/");
+std::string ls(const std::string& dirname);
+std::string ls();
 int create(const std::string& path, FileType type = FileType::Regular);
 bool link(const std::string& target, const std::string& name_path);
 bool unlink(const std::string& path);

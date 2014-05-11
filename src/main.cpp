@@ -77,7 +77,7 @@ int main() {
         } else if (cmd == "cd") {
             string dirname;
             cin >> dirname;
-            cout << (myfs::cd(dirname) ? "cwd changed" : "No such directory") << endl;
+            cout << (myfs::cd(dirname) ? "cwd changed" : "Cannot change directory") << endl;
         } else if (cmd == "pwd") {
             cout << myfs::pwd() << endl;
         } else if (cmd == "symlink") {
