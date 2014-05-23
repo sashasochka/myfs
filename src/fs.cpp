@@ -30,7 +30,7 @@ constexpr int ZERO_BLOCK = -1;
 constexpr int BAD_BLOCK = -2;
 
 auto root_inode_id = -1;
-auto device_capacity = -1;
+auto device_capacity = -1l;
 auto n_bitmask_blocks = -1;
 auto n_data_blocks = -1;
 string cwd = ROOTDIR_NAME;
@@ -101,7 +101,7 @@ void block_mark_used(int block_id) {
     assert(block_id >= n_bitmask_blocks);
     assert(is_mounted());
     fio.seekg((block_id - n_bitmask_blocks) / 8, fio.beg);
-    int old_mask = fio.get();
+    auto old_mask = fio.get();
     assert(old_mask >= 0);
     fio.seekp((block_id - n_bitmask_blocks) / 8, fio.beg);
     fio.put(static_cast<char>(old_mask | (1 << ((block_id - n_bitmask_blocks) % 8))));
@@ -114,7 +114,7 @@ void block_mark_unused(int block_id) {
     assert(block_id >= n_bitmask_blocks);
     assert(is_mounted());
     fio.seekg((block_id - n_bitmask_blocks) / 8, fio.beg);
-    int old_mask = fio.get();
+    auto  old_mask = fio.get();
     assert(old_mask >= 0);
     fio.seekp((block_id - n_bitmask_blocks) / 8, fio.beg);
     fio.put(static_cast<char>(old_mask & ~(1 << ((block_id - n_bitmask_blocks) % 8))));
@@ -160,7 +160,7 @@ int dir_find_file_inode(const File& dir, const string& filename) {
         return dir.inode_id();
     }
     auto data = dir.cat();
-    int dir_size = data.size();
+    auto dir_size = data.size();
     assert(data.size() % sizeof(Link) == 0);
 
     for (int n_file = 0; n_file < dir_size / sizeof(Link); ++n_file) {
@@ -626,7 +626,7 @@ bool rmdir(const string& dirname) {
     }
     File dir{dirname};
     auto data = dir.cat();
-    int dir_size = data.size();
+    size_t dir_size = data.size();
     assert(data.size() % sizeof(Link) == 0);
 
     for (int n_file = 0; n_file < dir_size / sizeof(Link); ++n_file) {
